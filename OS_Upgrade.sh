@@ -59,6 +59,7 @@
 # 17: Logged in user is not on the list of the FileVault enabled users.
 # 18: Password mismatch. User may have forgotten their password.
 # 19: FileVault error with fdesetup. Authenticated restart unsuccessful.
+# 20: Unable to quit all applications safely.
 
 # Variables to determine paths, OS version, disk space, and power connection. Do not edit.
 available_free_space=$(/bin/df -g / | /usr/bin/tail -1 | /usr/bin/awk '{print $4}')
@@ -545,6 +546,46 @@ installOS (){
     fi
     exit 0
 }
+
+# Prompt all running applications to quit before running the installer
+exitCode=$(osascript <<EOD
+tell application "System Events" to set the visible of every process to true
+set white_list to {"Finder", "Self Service"}
+try
+    tell application "Finder"
+    	set process_list to the name of every process whose visible is true
+    end tell
+    repeat with i from 1 to (number of items in process_list)
+        set this_process to item i of the process_list 
+        if this_process is not in white_list then
+            tell application this_process
+            	activate
+                with timeout 30 seconds
+                	quit
+				end timeout
+            end tell
+        end if
+    end repeat
+on error
+		try
+			set exitCode to this_process
+		    tell the current application to display dialog "We were unable to close all applications." & return & "Please save your work, close all applications, and try again." buttons {"Quit"} default button 1 with icon 0
+			if button returned of result = "Quit" then
+				set exitCode to this_process				
+			end if
+		on error
+			tell the current application to display dialog "There was an error." & return & "Please contact your administrator for support." buttons {"Quit"} default button 1 with icon 0
+			if button returned of result = "Quit" then
+				set exitCode to "AppleScript"
+			end if
+		end try
+end try
+EOD)
+
+if [ ! -z "$exitCode" ]; then
+	/bin/echo "Process stalled trying to quit "$exitCode
+	exit 20
+fi	
 
 if [[ ! -e "$mac_os_installer_path" ]]; then
         downloadOSInstaller
