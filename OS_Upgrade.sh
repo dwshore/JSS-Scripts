@@ -59,6 +59,7 @@
 # 17: Logged in user is not on the list of the FileVault enabled users.
 # 18: Password mismatch. User may have forgotten their password.
 # 19: FileVault error with fdesetup. Authenticated restart unsuccessful.
+# 21: Installer failed validation. Replace your installer and try again.
 
 # Variables to determine paths, OS version, disk space, and power connection. Do not edit.
 available_free_space=$(/bin/df -g / | /usr/bin/tail -1 | /usr/bin/awk '{print $4}')
@@ -484,6 +485,17 @@ minOSReqCheck (){
     return 0
 }
 
+#   Command to check validity of the installer package. If it's not valid, the install process resets and warns the user.
+checkPackage () {
+    echo "Running validity check."
+    codesign -v $mac_os_installer_path
+    if [[ $? != 0 ]]; then
+        echo "Installer package is invalid. Reseting process"
+        "$jamfHelper" -windowType utility -icon "$alerticon" -heading "Installation Failure" -description "$upgrade_error" -button1 "Exit" -defaultButton 1 &
+        exit 21
+    fi
+}
+
 # Function that determines what OS is on the macOS installer.app so that the appropriate startosinstall options are used as Apple has changed it with 10.12.4
 # Supply a parameter $1 for this function that includes the macOS app installer you are using to upgrade.
 installCommand (){
@@ -545,6 +557,10 @@ installOS (){
     fi
     exit 0
 }
+
+# Check the package is valid before installing
+echo "Checking package integrity."
+checkPackage
 
 if [[ ! -e "$mac_os_installer_path" ]]; then
         downloadOSInstaller
